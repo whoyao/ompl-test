@@ -54,7 +54,7 @@
 #include <ompl/geometric/planners/rrt/InformedRRTstar.h>
 #include <ompl/geometric/planners/rrt/RRTstar.h>
 #include <ompl/geometric/planners/rrt/RRT.h>
-#include <ompl/geometric/planners/rrt/SORRTstar.h>
+//#include <ompl/geometric/planners/rrt/SORRTstar.h>
 
 
 // For boost program options
@@ -81,7 +81,7 @@ enum optimalPlanner
     PLANNER_INF_RRTSTAR,
     PLANNER_PRMSTAR,
     PLANNER_RRTSTAR,
-    PLANNER_SORRTSTAR,
+//    PLANNER_SORRTSTAR,
 };
 
 // An enum of the supported optimization objectives, alphabetical order
@@ -128,7 +128,9 @@ public:
 
         // Distance formula between two points, offset by the circle's
         // radius
-        return sqrt((x-0.5)*(x-0.5) + (y-0.5)*(y-0.5)) - 0.25;
+        std::cout << x << std::endl;
+        std::cout << y << std::endl;
+        return sqrt((x-5)*(x-5) + (y-5)*(y-5)) - 4;
     }
 };
 
@@ -183,11 +185,11 @@ ob::PlannerPtr allocatePlanner(ob::SpaceInformationPtr si, optimalPlanner planne
             return std::make_shared<og::RRTstar>(si);
             break;
         }
-        case PLANNER_SORRTSTAR:
-        {
-            return std::make_shared<og::SORRTstar>(si);
-            break;
-        }
+//        case PLANNER_SORRTSTAR:
+//        {
+//            return std::make_shared<og::SORRTstar>(si);
+//            break;
+//        }
         default:
         {
             OMPL_ERROR("Planner-type enum is not implemented in allocation function.");
@@ -224,13 +226,13 @@ void plan(double runTime, optimalPlanner plannerType, planningObjective objectiv
 {
     // Construct the robot state space in which we're planning. We're
     // planning in [0,1]x[0,1], a subset of R^2.
-    ob::StateSpacePtr space(std::make_shared<ob::DubinsStateSpace>(1.0, false));
+    ob::StateSpacePtr space(std::make_shared<ob::DubinsStateSpace>(1.0));
 
 //    space->setBounds(0.0, 1.0);
 
     ob::RealVectorBounds bounds(2);
     bounds.setLow(0);
-    bounds.setHigh(10);
+    bounds.setHigh(18);
 
     // Set the bounds of space to be in [0,1].
     space->as<ob::SE2StateSpace>()->setBounds(bounds);
@@ -240,23 +242,20 @@ void plan(double runTime, optimalPlanner plannerType, planningObjective objectiv
 
     // Set the object used to check which states in the space are valid
     si->setStateValidityChecker(std::make_shared<ValidityChecker>(si));
-    si->setStateValidityCheckingResolution(0.005);
+//    si->setStateValidityCheckingResolution(0.005);
 
     si->setup();
 
     // Set our robot's starting state to be the bottom-left corner of
     // the environment, or (0,0).
     ob::ScopedState<> start(space);
-    start->as<ob::RealVectorStateSpace::StateType>()->values[0] = 0.0;
-    start->as<ob::RealVectorStateSpace::StateType>()->values[1] = 0.0;
-    start->as<ob::RealVectorStateSpace::StateType>()->values[2] = 0.0;
 
     // Set our robot's goal state to be the top-right corner of the
     // environment, or (1,1).
     ob::ScopedState<> goal(space);
-    goal->as<ob::RealVectorStateSpace::StateType>()->values[0] = 17.0;
-    goal->as<ob::RealVectorStateSpace::StateType>()->values[1] = 17.0;
-    goal->as<ob::RealVectorStateSpace::StateType>()->values[2] = 0.0;
+
+    start[0] = start[1] = 1.; start[2] = 0.;
+    goal[0] = goal[1] = 17; goal[2] = -.99*boost::math::constants::pi<double>();
 
     // Create a problem instance
     auto pdef(std::make_shared<ob::ProblemDefinition>(si));
@@ -294,8 +293,11 @@ void plan(double runTime, optimalPlanner plannerType, planningObjective objectiv
         if (!outputFile.empty())
         {
             std::ofstream outFile(outputFile.c_str());
-            std::static_pointer_cast<og::PathGeometric>(pdef->getSolutionPath())->
-                printAsMatrix(outFile);
+            auto path = std::static_pointer_cast<og::PathGeometric>(pdef->getSolutionPath());
+            path->interpolate(100);
+            path->printAsMatrix(outFile);
+//                    std::static_pointer_cast<og::PathGeometric>(pdef->getSolutionPath())->
+//                printAsMatrix(outFile);
             outFile.close();
         }
     }
@@ -515,10 +517,10 @@ bool argParse(int argc, char** argv, double* runTimePtr, optimalPlanner *planner
     {
         *plannerPtr = PLANNER_RRTSTAR;
     }
-    else if (boost::iequals("SORRTstar", plannerStr))
-    {
-        *plannerPtr = PLANNER_SORRTSTAR;
-    }
+//    else if (boost::iequals("SORRTstar", plannerStr))
+//    {
+//        *plannerPtr = PLANNER_SORRTSTAR;
+//    }
     else
     {
         std::cout << "Invalid planner string." << std::endl << std::endl << desc << std::endl;

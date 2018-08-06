@@ -39,6 +39,7 @@
 #include <ompl/base/ScopedState.h>
 #include <ompl/geometric/SimpleSetup.h>
 #include <boost/program_options.hpp>
+#include <ompl/geometric/planners/rrt/RRTConnect.h>
 
 namespace ob = ompl::base;
 namespace og = ompl::geometric;
@@ -75,16 +76,27 @@ void plan(const ob::StateSpacePtr& space, bool easy)
     }
     space->as<ob::SE2StateSpace>()->setBounds(bounds);
 
-    // define a simple setup class
-    og::SimpleSetup ss(space);
+//    // define a simple setup class
+//    og::SimpleSetup ss(space);
 
-    // set state validity checking for this space
-    const ob::SpaceInformation *si = ss.getSpaceInformation().get();
+    // Construct a space information instance for this state space
+    auto si(std::make_shared<ob::SpaceInformation>(space));
     auto isStateValid = easy ? isStateValidEasy : isStateValidHard;
-    ss.setStateValidityChecker([isStateValid, si](const ob::State *state)
-        {
-            return isStateValid(si, state);
-        });
+    si->setStateValidityChecker([isStateValid, si](const ob::State *state)
+                                {
+                                    return isStateValid(si, state);
+                                });
+
+    si->setup();
+
+
+//    // set state validity checking for this space
+//    const ob::SpaceInformation *si = ss.getSpaceInformation().get();
+//    auto isStateValid = easy ? isStateValidEasy : isStateValidHard;
+//    ss.setStateValidityChecker([isStateValid, si](const ob::State *state)
+//        {
+//            return isStateValid(si, state);
+//        });
 
     // set the start and goal states
     if (easy)
@@ -97,24 +109,35 @@ void plan(const ob::StateSpacePtr& space, bool easy)
         start[0] = start[1] = .5; start[2] = .5*boost::math::constants::pi<double>();;
         goal[0] = 5.5; goal[1] = .5; goal[2] = .5*boost::math::constants::pi<double>();
     }
-    ss.setStartAndGoalStates(start, goal);
+//    ss.setStartAndGoalStates(start, goal);
+//
+//    // this call is optional, but we put it in to get more output information
+//    ss.getSpaceInformation()->setStateValidityCheckingResolution(0.005);
+//    ss.setup();
+//    ss.print();
+//
+//    // attempt to solve the problem within 30 seconds of planning time
+//    ob::PlannerStatus solved = ss.solve(30.0);
 
-    // this call is optional, but we put it in to get more output information
-    ss.getSpaceInformation()->setStateValidityCheckingResolution(0.005);
-    ss.setup();
-    ss.print();
+    // Create a problem instance
+    auto pdef(std::make_shared<ob::ProblemDefinition>(si));
 
-    // attempt to solve the problem within 30 seconds of planning time
-    ob::PlannerStatus solved = ss.solve(30.0);
+    // Set the start and goal states
+    pdef->setStartAndGoalStates(start, goal);
+
+    auto planner(std::make_shared<og::RRTConnect>(si));
+    planner->setProblemDefinition(pdef);
+    planner->setup();
 
     if (solved)
     {
         std::vector<double> reals;
 
         std::cout << "Found solution:" << std::endl;
-        ss.simplifySolution();
-        og::PathGeometric path = ss.getSolutionPath();
-        path.interpolate(100);
+//        ss.simplifySolution();
+//        og::PathGeometric path = ss.getSolutionPath();
+        og::PathGeometric path = si->getSolutionPath();
+        path.interpolate(1000);
         path.printAsMatrix(std::cout);
     }
     else

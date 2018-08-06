@@ -35,10 +35,13 @@
 /* Author: Luis G. Torres, Jonathan Gammell */
 
 #include <ompl/base/SpaceInformation.h>
+#include <ompl/base/spaces/RealVectorStateSpace.h>
+#include <ompl/base/spaces/DubinsStateSpace.h>
+#include <ompl/base/spaces/ReedsSheppStateSpace.h>
 #include <ompl/base/objectives/PathLengthOptimizationObjective.h>
 #include <ompl/base/objectives/StateCostIntegralObjective.h>
 #include <ompl/base/objectives/MaximizeMinClearanceObjective.h>
-#include <ompl/base/spaces/RealVectorStateSpace.h>
+
 // For ompl::msg::setLogLevel
 #include "ompl/util/Console.h"
 
@@ -50,6 +53,7 @@
 #include <ompl/geometric/planners/prm/PRMstar.h>
 #include <ompl/geometric/planners/rrt/InformedRRTstar.h>
 #include <ompl/geometric/planners/rrt/RRTstar.h>
+#include <ompl/geometric/planners/rrt/RRT.h>
 #include <ompl/geometric/planners/rrt/SORRTstar.h>
 
 
@@ -220,16 +224,21 @@ void plan(double runTime, optimalPlanner plannerType, planningObjective objectiv
 {
     // Construct the robot state space in which we're planning. We're
     // planning in [0,1]x[0,1], a subset of R^2.
-    auto space(std::make_shared<ob::RealVectorStateSpace>(2));
+    auto space(std::make_shared<ob::DubinsStateSpace>());
+
+    ob::RealVectorBounds bounds(2);
+    bounds.setLow(0);
+    bounds.setHigh(10);
 
     // Set the bounds of space to be in [0,1].
-    space->setBounds(0.0, 1.0);
+    space->as<ob::SE2StateSpace>()->setBounds(bounds);
 
     // Construct a space information instance for this state space
     auto si(std::make_shared<ob::SpaceInformation>(space));
 
     // Set the object used to check which states in the space are valid
     si->setStateValidityChecker(std::make_shared<ValidityChecker>(si));
+    si->setStateValidityCheckingResolution(0.005);
 
     si->setup();
 
@@ -238,12 +247,14 @@ void plan(double runTime, optimalPlanner plannerType, planningObjective objectiv
     ob::ScopedState<> start(space);
     start->as<ob::RealVectorStateSpace::StateType>()->values[0] = 0.0;
     start->as<ob::RealVectorStateSpace::StateType>()->values[1] = 0.0;
+    start->as<ob::RealVectorStateSpace::StateType>()->values[2] = 0.0;
 
     // Set our robot's goal state to be the top-right corner of the
     // environment, or (1,1).
     ob::ScopedState<> goal(space);
-    goal->as<ob::RealVectorStateSpace::StateType>()->values[0] = 1.0;
-    goal->as<ob::RealVectorStateSpace::StateType>()->values[1] = 1.0;
+    goal->as<ob::RealVectorStateSpace::StateType>()->values[0] = 17.0;
+    goal->as<ob::RealVectorStateSpace::StateType>()->values[1] = 17.0;
+    goal->as<ob::RealVectorStateSpace::StateType>()->values[2] = 0.0;
 
     // Create a problem instance
     auto pdef(std::make_shared<ob::ProblemDefinition>(si));

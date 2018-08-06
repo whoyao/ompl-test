@@ -224,7 +224,9 @@ void plan(double runTime, optimalPlanner plannerType, planningObjective objectiv
 {
     // Construct the robot state space in which we're planning. We're
     // planning in [0,1]x[0,1], a subset of R^2.
-    auto space(std::make_shared<ob::DubinsStateSpace>());
+    auto space(std::make_shared<ob::DubinsStateSpace>(1.0, false));
+
+//    space->setBounds(0.0, 1.0);
 
     ob::RealVectorBounds bounds(2);
     bounds.setLow(0);

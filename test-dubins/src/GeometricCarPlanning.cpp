@@ -53,6 +53,8 @@ bool isStateValidEasy(const ob::SpaceInformation *si, const ob::State *state)
 {
     const auto *s = state->as<ob::SE2StateSpace::StateType>();
     double x=s->getX(), y=s->getY();
+    std::cout << x <<std::endl;
+    std::cout << y <<std::endl;
     return si->satisfiesBounds(s) && (x<5 || x>13 || (y>8.5 && y<9.5));
 }
 

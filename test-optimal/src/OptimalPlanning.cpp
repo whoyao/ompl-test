@@ -39,10 +39,12 @@
 #include <ompl/base/objectives/StateCostIntegralObjective.h>
 #include <ompl/base/objectives/MaximizeMinClearanceObjective.h>
 #include <ompl/base/spaces/RealVectorStateSpace.h>
+#include <ompl/base/spaces/DubinsStateSpace.h>
 // For ompl::msg::setLogLevel
 #include "ompl/util/Console.h"
 
 // The supported optimal planners, in alphabetical order
+#include <ompl/geometric/SimpleSetup.h>
 #include <ompl/geometric/planners/bitstar/BITstar.h>
 #include <ompl/geometric/planners/cforest/CForest.h>
 #include <ompl/geometric/planners/fmt/FMT.h>
@@ -50,7 +52,7 @@
 #include <ompl/geometric/planners/prm/PRMstar.h>
 #include <ompl/geometric/planners/rrt/InformedRRTstar.h>
 #include <ompl/geometric/planners/rrt/RRTstar.h>
-#include <ompl/geometric/planners/rrt/SORRTstar.h>
+//#include <ompl/geometric/planners/rrt/SORRTstar.h>
 
 
 // For boost program options
@@ -77,7 +79,7 @@ enum optimalPlanner
     PLANNER_INF_RRTSTAR,
     PLANNER_PRMSTAR,
     PLANNER_RRTSTAR,
-    PLANNER_SORRTSTAR,
+//    PLANNER_SORRTSTAR,
 };
 
 // An enum of the supported optimization objectives, alphabetical order
@@ -106,25 +108,29 @@ public:
     // circular obstacle
     bool isValid(const ob::State* state) const override
     {
-        return this->clearance(state) > 0.0;
+        // We know we're working with a RealVectorStateSpace in this
+        // example, so we downcast state into the specific type.
+        const auto* state2D =
+                state->as<ob::SE2StateSpace::StateType>();
+        return si_->satisfiesBounds(state2D) && this->clearance(state) > 0.0;
     }
 
     // Returns the distance from the given state's position to the
     // boundary of the circular obstacle.
     double clearance(const ob::State* state) const override
     {
-        // We know we're working with a RealVectorStateSpace in this
-        // example, so we downcast state into the specific type.
         const auto* state2D =
-            state->as<ob::RealVectorStateSpace::StateType>();
-
+                state->as<ob::SE2StateSpace::StateType>();
         // Extract the robot's (x,y) position from its state
-        double x = state2D->values[0];
-        double y = state2D->values[1];
+        double x = state2D->getX();
+        double y = state2D->getY();
+
+//        std::cout << x << std::endl;
+//        std::cout << y << std::endl;
 
         // Distance formula between two points, offset by the circle's
         // radius
-        return sqrt((x-0.5)*(x-0.5) + (y-0.5)*(y-0.5)) - 0.25;
+        return (sqrt((x-5)*(x-5) + (y-5)*(y-5)) - 2.5);
     }
 };
 
@@ -179,11 +185,11 @@ ob::PlannerPtr allocatePlanner(ob::SpaceInformationPtr si, optimalPlanner planne
             return std::make_shared<og::RRTstar>(si);
             break;
         }
-        case PLANNER_SORRTSTAR:
-        {
-            return std::make_shared<og::SORRTstar>(si);
-            break;
-        }
+//        case PLANNER_SORRTSTAR:
+//        {
+//            return std::make_shared<og::SORRTstar>(si);
+//            break;
+//        }
         default:
         {
             OMPL_ERROR("Planner-type enum is not implemented in allocation function.");
@@ -218,6 +224,84 @@ ob::OptimizationObjectivePtr allocateObjective(const ob::SpaceInformationPtr& si
 
 void plan(double runTime, optimalPlanner plannerType, planningObjective objectiveType, const std::string& outputFile)
 {
+    ob::StateSpacePtr space(std::make_shared<ob::DubinsStateSpace>(1.0));
+    ob::ScopedState<> start(space), goal(space);
+    ob::RealVectorBounds bounds(2);
+    bounds.setLow(0);
+    bounds.setHigh(18);
+
+    space->as<ob::SE2StateSpace>()->setBounds(bounds);
+
+    // define a simple setup class
+    og::SimpleSetup ss(space);
+
+    // set state validity checking for this space
+    const ob::SpaceInformationPtr& si = ss.getSpaceInformation();
+    ss.setStateValidityChecker(std::make_shared<ValidityChecker>(si));
+
+    // set the start and goal states
+    start[0] = start[1] = 1; start[2] = 0.;
+    goal[0] = goal[1] = 15; goal[2] = -.99*boost::math::constants::pi<double>();
+
+    ss.setStartAndGoalStates(start, goal);
+
+    // this call is optional, but we put it in to get more output information
+    ss.getSpaceInformation()->setStateValidityCheckingResolution(0.005);
+
+//    // Create the optimization objective specified by our command-line argument.
+//    // This helper function is simply a switch statement.
+//    ss.setOptimizationObjective(allocateObjective(si, objectiveType));
+
+    // Construct the optimal planner specified by our command line argument.
+    // This helper function is simply a switch statement.
+    ss.setPlanner(allocatePlanner(si, plannerType));
+
+
+    ss.setup();
+    ss.print();
+
+    // attempt to solve the problem within 30 seconds of planning time
+    ob::PlannerStatus solved = ss.solve(runTime);
+
+    if (solved)
+    {
+        // Output the length of the path found
+        std::cout
+                << ss.getPlanner()->getName()
+                << " found a solution of length "
+                << ss.getSolutionPath().length()
+                << " with an optimization objective value of "
+                << ss.getSolutionPath().cost(ss.getOptimizationObjective()) << std::endl;
+
+        // If a filename was specified, output the path as a matrix to
+        // that file for visualization
+        if (!outputFile.empty())
+        {
+            std::ofstream outFile(outputFile.c_str());
+            ss.simplifySolution();
+            og::PathGeometric path = ss.getSolutionPath();
+            path.interpolate(100);
+            path.printAsMatrix(outFile);
+            outFile.close();
+        }
+    }
+    else
+        std::cout << "No solution found." << std::endl;
+
+//    if (solved)
+//    {
+//        std::vector<double> reals;
+//
+//        std::cout << "Found solution:" << std::endl;
+//        ss.simplifySolution();
+//        og::PathGeometric path = ss.getSolutionPath();
+//        path.interpolate(100);
+//        path.printAsMatrix(std::cout);
+//    }
+//    else
+//        std::cout << "No solution found" << std::endl;
+
+/*    ===================================================================
     // Construct the robot state space in which we're planning. We're
     // planning in [0,1]x[0,1], a subset of R^2.
     auto space(std::make_shared<ob::RealVectorStateSpace>(2));
@@ -266,6 +350,7 @@ void plan(double runTime, optimalPlanner plannerType, planningObjective objectiv
     // attempt to solve the planning problem in the given runtime
     ob::PlannerStatus solved = optimizingPlanner->solve(runTime);
 
+
     if (solved)
     {
         // Output the length of the path found
@@ -288,6 +373,8 @@ void plan(double runTime, optimalPlanner plannerType, planningObjective objectiv
     }
     else
         std::cout << "No solution found." << std::endl;
+
+        */
 }
 
 int main(int argc, char** argv)
@@ -502,10 +589,10 @@ bool argParse(int argc, char** argv, double* runTimePtr, optimalPlanner *planner
     {
         *plannerPtr = PLANNER_RRTSTAR;
     }
-    else if (boost::iequals("SORRTstar", plannerStr))
-    {
-        *plannerPtr = PLANNER_SORRTSTAR;
-    }
+//    else if (boost::iequals("SORRTstar", plannerStr))
+//    {
+//        *plannerPtr = PLANNER_SORRTSTAR;
+//    }
     else
     {
         std::cout << "Invalid planner string." << std::endl << std::endl << desc << std::endl;
